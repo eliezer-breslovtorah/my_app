@@ -9,6 +9,24 @@ import {
   getDownloadURL,
 } from "firebase/storage";
 import { storage } from "../../../firebase";
+import CategoryClient from "./CategoryClient";
+
+// Pre-render static export shells for known categories
+export async function generateStaticParams() {
+  return [
+    { category: "nach" },
+    { category: "default" },
+  ];
+}
+
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ category: string }>;
+}) {
+  const { category } = await params;
+  return <CategoryClient categorySlug={category} />;
+}
 
 type AudioItem = {
   filename: string;
