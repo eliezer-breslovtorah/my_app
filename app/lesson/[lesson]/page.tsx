@@ -9,6 +9,21 @@ import {
   getDownloadURL,
 } from "firebase/storage";
 import { storage } from "../../../firebase";
+import LessonClient from "./LessonClient";
+
+// Gives Next.js a placeholder route to pre-render during static export
+export async function generateStaticParams() {
+  return [{ lesson: "default" }];
+}
+
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ lesson: string }>;
+}) {
+  const { lesson } = await params;
+  return <LessonClient lessonSlug={lesson} />;
+}
 
 type Lesson = {
   filename: string;
