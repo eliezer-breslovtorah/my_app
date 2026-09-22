@@ -18,18 +18,21 @@ type AudioItem = {
 };
 
 function getSeries(filename: string) {
-  const lower = filename.toLowerCase();
+  const book = filename.match(/^n\d+(?:clip(?:-?\d+)?)?-(.+?)-lesson-/i)?.[1];
 
-  if (lower.includes("yehoshua")) return "Yehoshua";
-  if (lower.includes("shoftim")) return "Shoftim";
+  return book
+    ? book.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : undefined;
+}
 
-  return "Other";
+function getLessonNumber(filename: string) {
+  return filename.match(/^n(\d+)/i)?.[1];
 }
 
 function makeTitle(filename: string) {
-  let title = filename
+  const title = filename
     .replace(/\.mp3$/i, "")
-    .replace(/^n\d+(clip-\d+)?-/i, "")
+    .replace(/^n\d+(?:clip(?:-?\d+)?)?-/i, "")
     .replace(/-esv.*$/i, "")
     .replace(/-v\d+.*$/i, "")
     .replace(/-edu$/i, "")
@@ -47,6 +50,8 @@ function makeSlug(text: string) {
 export default function Home() {
   const [audioItems, setAudioItems] = useState<AudioItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedBook, setSelectedBook] = useState("");
+  const [selectedType, setSelectedType] = useState("");
 
   useEffect(() => {
     async function loadAudioFiles() {
@@ -58,6 +63,15 @@ export default function Home() {
           item.name.toLowerCase().endsWith(".mp3")
         );
 
+        const booksByLesson = new Map<string, string>();
+        for (const file of mp3Files) {
+          const book = getSeries(file.name);
+          const number = getLessonNumber(file.name);
+          if (book && number && !file.name.toLowerCase().includes("clip")) {
+            booksByLesson.set(number, book);
+          }
+        }
+
         const items = await Promise.all(
           mp3Files.map(async (itemRef) => {
             const url = await getDownloadURL(itemRef);
@@ -65,7 +79,7 @@ export default function Home() {
             return {
               filename: itemRef.name,
               url,
-              series: getSeries(itemRef.name),
+              series: getSeries(itemRef.name) ?? booksByLesson.get(getLessonNumber(itemRef.name) ?? "") ?? "Other",
               title: makeTitle(itemRef.name),
               isClip: itemRef.name
                 .toLowerCase()
@@ -85,7 +99,11 @@ export default function Home() {
     loadAudioFiles();
   }, []);
 
-  const featuredLessons = audioItems.slice(0, 4);
+  const books = Array.from(new Set(audioItems.map((item) => item.series)));
+  const filteredLessons = audioItems.filter((item) =>
+    (!selectedBook || item.series === selectedBook) &&
+    (!selectedType || (selectedType === "clips" ? item.isClip : !item.isClip))
+  );
 
   return (
     <main
@@ -140,7 +158,7 @@ export default function Home() {
           >
             <Link href="/">Home</Link>
             <Link href="/category/nach">Nach</Link>
-            <a href="#featured">Featured</a>
+            <a href="#featured">Lessons</a>
           </nav>
         </div>
       </header>
@@ -238,7 +256,7 @@ export default function Home() {
                 margin: 0,
               }}
             >
-              Topics to Explore
+              Browse Lessons
             </h2>
           </div>
 
@@ -250,62 +268,31 @@ export default function Home() {
               gap: "20px",
             }}
           >
-            <Link
-              href="/category/nach"
-              style={{
-                background: "#ffffff",
-                border: "1px solid #ddd",
-                padding: "32px",
-                minHeight: "170px",
-                textDecoration: "none",
-                color: "#222",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontSize: "13px",
-                    textTransform: "uppercase",
-                    letterSpacing: "1px",
-                    color: "#777",
-                    marginBottom: "10px",
-                  }}
-                >
-                  Torah
-                </div>
-
-                <h3
-                  style={{
-                    fontSize: "28px",
-                    margin: 0,
-                  }}
-                >
-                  Nach
-                </h3>
-
-                <p
-                  style={{
-                    color: "#666",
-                    lineHeight: "1.5",
-                    marginTop: "12px",
-                  }}
-                >
-                  Yehoshua, Shoftim, and other books of Nach.
-                </p>
-              </div>
-
-              <div
-                style={{
-                  marginTop: "25px",
-                  fontSize: "15px",
-                }}
+            <label style={{ display: "grid", gap: "10px", fontWeight: "bold" }}>
+              Book
+              <select
+                value={selectedBook}
+                onChange={(event) => setSelectedBook(event.target.value)}
+                disabled={loading}
+                style={{ width: "100%", padding: "14px", background: "#fff", border: "1px solid #ddd", font: "inherit", color: "#222" }}
               >
-                Explore Nach →
-              </div>
-            </Link>
+                <option value="">All books</option>
+                {books.map((book) => <option key={book} value={book}>{book}</option>)}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: "10px", fontWeight: "bold" }}>
+              Type
+              <select
+                value={selectedType}
+                onChange={(event) => setSelectedType(event.target.value)}
+                disabled={loading}
+                style={{ width: "100%", padding: "14px", background: "#fff", border: "1px solid #ddd", font: "inherit", color: "#222" }}
+              >
+                <option value="">All types</option>
+                <option value="full">Full lessons</option>
+                <option value="clips">Clips</option>
+              </select>
+            </label>
           </div>
         </section>
 
@@ -334,11 +321,15 @@ export default function Home() {
                 margin: 0,
               }}
             >
-              Featured Lessons
+              Lessons
             </h2>
           </div>
 
-          {loading && <p>Loading lessons...</p>}
+          <p role="status">
+            {loading ? "Loading lessons..." : filteredLessons.length === 0
+              ? "No lessons match your selections."
+              : `Showing ${filteredLessons.length} recording${filteredLessons.length === 1 ? "" : "s"}`}
+          </p>
 
           <div
             style={{
@@ -348,7 +339,7 @@ export default function Home() {
               gap: "22px",
             }}
           >
-            {featuredLessons.map((lesson) => (
+            {filteredLessons.map((lesson) => (
               <article
                 key={lesson.filename}
                 style={{
